@@ -6,16 +6,6 @@ setwd("~/Documents/szkoła/sem4/ADP/amu_adp_final_proj/src/R/GUS/")
 
 
 drogi <- read.csv2("../../../data/GUS/drogi-polska.csv", sep = ";")
-
-drogi %>% 
-  mutate(nowyKod = Kod / 1000) %>%
-  filter(Rodzaje.dróg == 'autostrady', Wartosc != '') %>% 
-  select(Nazwa, Wartosc, Rok) %>% 
-  ggplot(aes(x=Rok, y=Wartosc)) +
-  geom_col() +
-  geom_line(data = wypadki_trend, aes(x=Rok, y=suma))
-
-
 wypadki <- read.csv2("../../../data/GUS/wypadki-polska.csv")
 
 wypadki %>% 
@@ -25,3 +15,10 @@ wypadki %>%
   group_by(Rok) %>% 
   transmute(suma = sum(Wartosc)) -> wypadki_trend
 
+drogi %>% 
+  mutate(nowyKod = Kod / 1000) %>%
+  filter(Rodzaje.dróg == 'autostrady', Wartosc != '') %>% 
+  select(Nazwa, Wartosc, Rok) %>% 
+  ggplot(aes(x=Rok, y=Wartosc)) +
+  geom_col() +
+  geom_line(data = wypadki_trend, aes(x=Rok, y=suma))
