@@ -49,6 +49,7 @@ ggplot(mapdata, aes(fill = cat)) +
 # mapa (wypełnienie w skali ciągłej)
 ggplot(mapdata, aes(fill = values)) +
   geom_sf(color = alpha('black', 1/3), alpha = .6) + 
+  scale_fill_gradient(low="white", high="red") +
   coord_sf(xlim = c(-20,44), ylim = c(30,70)) +
   labs(title = 'Ofiary śmiertelne wypadków drogowych, 2018', 
        subtitle = 'Średnia na 100 tys. mieszkańców', 
@@ -154,7 +155,7 @@ ggplot(filter(dat_road, tra_infr == 'RD_RUR'), aes(x = reorder(country, rate), y
 # długość sieci autostrad na poziomie państw (dane niepełne)
 dat_motorways <- get_eurostat(id = 'ttr00002', time_format = 'num', filters = list(time = '2017')) %>%
   filter(tra_infr == 'MWAY') %>%
-  dplyr::rename(mlenght = values)
+  rename(mlenght = values)
 
 dat_motorways_deaths <- dat_road %>%
   filter(tra_infr == 'MWAY') %>%
@@ -216,6 +217,7 @@ ggplot(mapdata_nuts, aes(fill = cat))+
 
 ggplot(mapdata_nuts, aes(fill = values))+
   geom_sf(color = alpha('black', 1/3), alpha = .6) +
+  scale_fill_gradient(low="white", high="red") +
   xlim(c(-12,44)) + ylim(c(35,70)) +
   labs(title = 'Ofiary śmiertelne wypadków drogowych, 2018 (NUTS-2)', 
        subtitle = 'Ofiary na 1 mln.', 
@@ -240,15 +242,37 @@ ggplot(mapdata_nuts_de, aes(fill = cat)) +
 
 ggplot(mapdata_nuts_de, aes(fill = values)) +
   geom_sf(color = alpha('black', 1/3), alpha = .6) +
+  scale_fill_gradient(low="white", high="red") +
   xlim(c(5,15)) + ylim(c(47,55)) +
   labs(title = 'Ofiary śmiertelne wypadków drogowych w Niemczech, 2018 (NUTS-2)', 
        subtitle = 'Ofiary na 1 mln.', 
        fill = 'Liczba',
        caption = 'Mapa 6.')
 
-# historyczne granice NRD (dziwny obiekt, nie wiem jak go przetworzyć)
+# historyczne granice NRD
 library(cshapes)
-hist_geo <- cshapes::cshp(date = as.Date('1/1/1989', format='%m/%d/%Y'))
+hist_geo <- cshapes::cshp(as.Date("1989-1-1"), useGW = TRUE)
+hist_geo@data$geo_code <- as.character(hist_geo@data$ISO1AL3)
+div_de <- hist_geo[hist_geo@data$geo_code %in% c('DDR'), ]
+
+
+ggplot() +
+  geom_sf(data = mapdata_nuts_de, mapping = aes(fill = cat), color = alpha('white', 1/3)) +
+  scale_fill_brewer(palette = 'Oranges', direction = 1, guide = 'legend') +
+  geom_polygon(data = div_de, mapping = aes(long, lat, group = group, fill = '9 ~< 30', alpha = 1), color = 'black', show.legend = FALSE) +
+  labs(title = 'Ofiary śmiertelne wypadków drogowych w Niemczech, 2018 (NUTS-2)', 
+       subtitle = 'Naniesione granice dawnego NRD', 
+       fill = 'Liczba',
+       caption = 'Mapa 7.')
+
+ggplot() +
+  geom_sf(data = mapdata_nuts_de, mapping = aes(fill = values), color = alpha('white', 1/3)) +
+  scale_fill_gradient(low="white", high="red") +
+  geom_polygon(data = div_de, mapping = aes(long, lat, group = group, fill = 0, alpha = 1), color = 'black', show.legend = FALSE) +
+  labs(title = 'Ofiary śmiertelne wypadków drogowych w Niemczech, 2018 (NUTS-2)', 
+       subtitle = 'Naniesione granice dawnego NRD', 
+       fill = 'Liczba',
+       caption = 'Mapa 7.')
 
 # Cytowanie (wymagane przez autora biblioteki):
 # Weidmann, Nils B., Doreen Kuse, and Kristian Skrede Gleditsch. 2010. The Geography of the International System: The CShapes Dataset. International Interactions 36 (1).
