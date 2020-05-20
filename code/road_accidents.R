@@ -177,3 +177,64 @@ ggplot(dat_series_nr, aes(x = time, y = values, color = geo, label = country)) +
   theme(legend.position = 'none') +
   labs(title = "Ofiary œmiertelne wypadków drogowych, 2000-2018", x = "Rok", y = "Liczba")
 
+
+
+# 1. liczba samochodów osobowych na 1000 mieszkanców: road_eqs_carhab
+# 2. liczba pojazdów z podzialem na kategorie i NUTS 2: tran_r_vehst
+# 3. dlugosc autostrad i dróg szybkiego ruchu: road_if_motorwa
+
+####################################### liczba samochodów na 1000 mieszkancow ############################################
+# NOTE: usunac Turcje
+
+
+dat_pass_cars_2018 <- get_eurostat(id = 'road_eqs_carhab', time_format = 'num', filters = list(time = '2018')) %>%
+  mutate(country = label_eurostat(geo, dic = "geo", lang = 'en', custom_dic = c(DE = "Germany", XK = "Kosovo"))) 
+
+
+ggplot(dat_pass_cars_2018, aes(x = reorder(country, values), y = values, fill = ifelse(geo == "PL", "Highlighted", "Normal"))) +
+  geom_bar(stat = "identity") + 
+  theme(legend.position = "none", axis.title.y = element_blank()) +
+  labs(title = 'Liczba samochodow na 1000 mieszkancow, 2018', y = 'Samochody', x = NULL) +
+  coord_flip() 
+
+mapdata_pass_cars_2018 <- get_eurostat_geospatial(nuts_level = 0, resolution = 20, output_class = "sf") %>%
+  right_join(dat_pass_cars_2018) %>%
+  mutate(cat = cut_to_classes(values, n = 4, decimals = 1))
+
+ggplot(mapdata_pass_cars_2018, aes(fill = cat)) + 
+  scale_fill_brewer(palette = 'Reds') + 
+  geom_sf(color = alpha('black', 1/3), alpha = .6) + 
+  coord_sf(xlim = c(-20,44), ylim = c(30,70)) +
+  labs(title = 'Liczba samochodów, 2018', 
+       subtitle = '(na 1000 mieszkancow)', 
+       fill = 'Samochody',
+       caption = 'Mapa 1.')
+
+####################################### dlugosc autostrad ############################################
+# NOTE: usuniete drogi ekspresowe, bo duzo N/A
+
+dat_motorway_2018 <- get_eurostat(id = 'road_if_motorwa', time_format = 'num', filters = list(time = '2018')) %>%
+  mutate(country = label_eurostat(geo, dic = "geo", lang = 'en', custom_dic = c(DE = "Germany", XK = "Kosovo")))
+  
+dat_motorway_2018[is.na(dat_motorway_2018)] <- 0  
+
+dat_motorway_2018 <- dat_motorway_2018 %>%
+  filter(tra_infr == 'MWAY') 
+  
+ggplot(dat_motorway_2018, aes(x = reorder(country, values), y = values, fill = ifelse(country == "Poland", "Highlighted", "Normal"))) +
+  geom_bar(stat = "identity") + 
+  theme(legend.position = "none", axis.title.y = element_blank()) +
+  labs(title = 'Dlugosc autostrad, 2018', y = 'Km', x = NULL) +
+  coord_flip() 
+
+mapdata_motorway_2018 <- get_eurostat_geospatial(nuts_level = 0, resolution = 20, output_class = "sf") %>%
+  right_join(dat_motorway_2018) %>%
+  mutate(cat = cut_to_classes(values, n = 4, decimals = 1))
+
+ggplot(mapdata_motorway_2018, aes(fill = cat)) + 
+  scale_fill_brewer(palette = 'Reds') + 
+  geom_sf(color = alpha('black', 1/3), alpha = .6) + 
+  coord_sf(xlim = c(-20,44), ylim = c(30,70)) +
+  labs(title = 'Dlugosc autostrad, 2018', 
+       fill = 'Km',
+       caption = 'Mapa 1.')
