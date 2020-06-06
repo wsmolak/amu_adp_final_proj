@@ -171,6 +171,26 @@ ggplot(dat_motorways_deaths, aes(x = reorder(country, mrate), y = mrate, fill = 
   labs(title = 'Liczba ofiar 艣miertelnych wypadk贸w na 1 tys. km autostrad, 2017', y = 'Ofiary', x = NULL) +
   coord_flip()
 
+
+# inna biblioteka, latwiej ja znalezc, wyniki te same
+dat_motorways2 <- get_eurostat(id = 'road_if_motorwa', time_format = 'num', filters = list(time = '2017')) %>%
+  filter(tra_infr == 'MWAY') 
+
+dat_motorways_deaths2 <- dat_road %>%
+  filter(tra_infr == 'MWAY') %>%
+  select(geo, values, country) %>%
+  right_join(dat_motorways) %>%
+  mutate(mrate = values / mlenght * 1000) %>%
+  drop_na()
+
+ggplot(dat_motorways_deaths2, aes(x = reorder(country, mrate), y = mrate, fill = ifelse(geo == "PL", "Highlighted", "Normal"))) +
+  geom_bar(stat = "identity") + 
+  theme(legend.position = "none", axis.title.y = element_blank()) +
+  labs(title = 'Liczba ofiar 艣miertelnych wypadk贸w na 1 tys. km autostrad, 2017', y = 'Ofiary', x = NULL) +
+  coord_flip()
+
+
+
 ####################################### zmiana w czasie ################################################################################
 
 # por贸wnanie zmiany liczby ofiar 艣miertelnych wypadk贸w drogowych na przestrzeni lat 2000-2018 w wybranych pa艅stwach UE
@@ -273,6 +293,58 @@ ggplot() +
        subtitle = 'Naniesione granice dawnego NRD', 
        fill = 'Liczba',
        caption = 'Mapa 7.')
+
+
+####################################### liczba samochod體 osobowych ############################################
+
+# liczba samochod體 z podzialem na wiek - id: road_eqs_carage
+dat_pass_cars_tot <- get_eurostat(id = 'road_eqs_carage', time_format = 'num', filters = list(time = '2018')) %>%
+  mutate(country = label_eurostat(geo, dic = "geo", lang = 'en', custom_dic = c(DE = "Germany", XK = "Kosovo"))) %>%
+  filter(age == "TOTAL" & !geo %in% c('EU28', 'EU27_2020', 'TR')) %>%
+  dplyr::rename(cars_qty = values) %>%
+  select(geo, cars_qty, country)
+
+
+# liczba samochod體 osobowych na 1000 mieszkancow - id: road_eqs_carhab
+dat_pass_cars <- get_eurostat(id = 'road_eqs_carhab', time_format = 'num', filters = list(time = '2018')) %>%
+  mutate(country = label_eurostat(geo, dic = "geo", lang = 'en', custom_dic = c(DE = "Germany", XK = "Kosovo"))) %>%
+  filter(!geo %in% c('EU28', 'EU27_2020', 'TR')) %>%
+  select(geo, values, country)
+
+ggplot(dat_pass_cars, aes(x = reorder(country, values), y = values, fill = ifelse(geo == "PL", "Highlighted", "Normal"))) +
+  geom_bar(stat = "identity") + 
+  theme(legend.position = "none", axis.title.y = element_blank()) +
+  labs(title = 'Liczba samochodow osobowych na 1000 mieszkancow, 2018', y = 'Samochody', x = NULL) +
+  coord_flip()
+
+# stosunek liczby zgonow w wypadkach drogowych do liczby samochodow
+dat_deaths_pass_cars <- dat %>%
+  filter(unit == "NR" & !geo %in% c('EU28', 'EU27_2020', 'TR')) %>%
+  select(geo, country, values)  %>%
+  dplyr::rename(dat_values = values) %>%
+  left_join(dat_pass_cars_tot) %>%
+  mutate(rate = dat_values / cars_qty * 100000)
+
+ggplot(dat_deaths_pass_cars, aes(x = reorder(country, rate), y = rate, fill = ifelse(geo == "PL", "Highlighted", "Normal"))) +
+  geom_bar(stat = "identity") + 
+  theme(legend.position = "none", axis.title.y = element_blank()) +
+  labs(title = 'stosunek liczby zgonow w wypadkach drogowych do liczby samochodow, 2018', y = 'liczba zgon體 na 100000 samochodow', x = NULL) +
+  coord_flip()
+
+
+mapdata_deaths_pass_cars <- get_eurostat_geospatial(nuts_level = 0, resolution = 20, output_class = "sf") %>%
+  right_join(dat_deaths_pass_cars) %>%
+  mutate(cat = cut_to_classes(rate, n = 4, decimals = 1))
+
+ggplot(mapdata_deaths_pass_cars, aes(fill = cat)) + 
+  scale_fill_brewer(palette = 'Reds') + 
+  geom_sf(color = alpha('black', 1/3), alpha = .6) + 
+  coord_sf(xlim = c(-20,44), ylim = c(30,70)) +
+  labs(title = 'liczba zgon體, 2017', 
+       subtitle = '(na 100000 samochodow osobowych)', 
+       fill = 'zgony',
+       caption = 'Mapa 8.')
+
 
 # Cytowanie (wymagane przez autora biblioteki):
 # Weidmann, Nils B., Doreen Kuse, and Kristian Skrede Gleditsch. 2010. The Geography of the International System: The CShapes Dataset. International Interactions 36 (1).
