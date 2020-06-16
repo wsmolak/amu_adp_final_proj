@@ -1,12 +1,17 @@
 library(dplyr)
 library(ggplot2)
+library(sf)
+library(data.table)
+library(tidyverse)
 
 getwd()
 setwd("~/Documents/szkoła/sem4/ADP/amu_adp_final_proj/src/R/GUS/")
 
 
 drogi <- read.csv2("../../../data/GUS/drogi-polska.csv", sep = ";")
-wypadki <- read.csv2("../../../data/GUS/wypadki-polska.csv")
+wypadki <- read.csv2("../../../data/GUS/wypadki-polska.csv", sep = ";")
+
+powiaty <- st_read(dsn='../../../data/GUS/powiaty.gml', quiet = TRUE)
 
 wypadki %>% 
   mutate(nowyKod = Kod / 1000, rodzaj.jst = if_else(nowyKod %% 100 == 0, 'woj', 'pow')) %>%
@@ -44,3 +49,17 @@ ggplot() +
         axis.title.y.right = element_text(color = "red")
   ) 
 
+wypadki %>% 
+  select(Wartosc, Rok, Kod, Nazwa) %>% 
+  filter(str_detect(Nazwa, "^Powiat")) %>% 
+  drop_na() -> wypadki.powiaty
+
+
+#wypadki na 100 tys. mieszkańców na mapie powiatów
+wypadki.powiaty %>% 
+  select(Rok, Kod, Wartosc) %>% 
+  filter(Rok==2015) %>% 
+  mutate(KodJoin = Kod / 1000) %>% 
+  left_join(powiaty, by=c("KodJoin"="kodJednostki")) %>% 
+  ggplot(aes(geometry = geometry)) +
+  geom_sf(aes(fill=Wartosc))
