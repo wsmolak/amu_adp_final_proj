@@ -8,8 +8,11 @@ getwd()
 setwd("~/Documents/szkoła/sem4/ADP/amu_adp_final_proj/src/R/GUS/")
 
 
-drogi <- read.csv2("../../../data/GUS/drogi-polska.csv", sep = ";")
-wypadki <- read.csv2("../../../data/GUS/wypadki-polska.csv", sep = ";")
+drogi <- read.csv2("../../../data/GUS/drogi-polska.csv", sep = ";", encoding = "UTF-8")
+wypadki <- read.csv2("../../../data/GUS/wypadki-polska.csv", sep = ";", encoding = "UTF-8")
+
+pojazdy.polska <- read.csv('../../../data/GUS/pojazdy-polska.csv', sep = ";", encoding = "UTF-8")
+ludnosc.polska <- read.csv('../../../data/GUS/ludnosc-polska.csv', sep = ';', encoding = "UTF-8")
 
 powiaty <- st_read(dsn='../../../data/GUS/powiaty.gml', quiet = TRUE)
 
@@ -20,6 +23,21 @@ wypadki %>%
   group_by(Rok) %>% 
   transmute(suma = sum(Wartosc)) %>% 
   distinct() -> wypadki_trend
+
+wypadki %>% 
+  mutate(nowyKod = Kod / 1000, rodzaj.jst = if_else(nowyKod %% 100 == 0, 'woj', 'pow')) %>%
+  filter(rodzaj.jst == 'pow', Wskaźniki == 'ofiary śmiertelne na 100 tys. pojazdów', Wartosc != '') %>% 
+  select(-Wskaźniki, -Jednostka.miary, -Atrybut, -X, -rodzaj.jst) -> ofiary.na.100tysp
+
+wypadki %>% 
+  mutate(nowyKod = Kod / 1000, rodzaj.jst = if_else(nowyKod %% 100 == 0, 'woj', 'pow')) %>%
+  filter(rodzaj.jst == 'pow', Wskaźniki == 'ofiary śmiertelne na 100 wypadków', Wartosc != '') %>% 
+  select(-Wskaźniki, -Jednostka.miary, -Atrybut, -X,-rodzaj.jst) -> ofiary.na.100wyp
+  
+wypadki %>% 
+  mutate(nowyKod = Kod / 1000, rodzaj.jst = if_else(nowyKod %% 100 == 0, 'woj', 'pow')) %>%
+  filter(rodzaj.jst == 'pow', Wskaźniki == 'wypadki drogowe na 100 tys. ludności', Wartosc != '') %>% 
+  select(-Wskaźniki, -Jednostka.miary, -Atrybut, -X, -rodzaj.jst) -> wypadki.na.100tysp
 
 drogi %>% 
   mutate(nowyKod = Kod / 1000) %>%
@@ -49,17 +67,123 @@ ggplot() +
         axis.title.y.right = element_text(color = "red")
   ) 
 
-wypadki %>% 
-  select(Wartosc, Rok, Kod, Nazwa) %>% 
-  filter(str_detect(Nazwa, "^Powiat")) %>% 
-  drop_na() -> wypadki.powiaty
-
 
 #wypadki na 100 tys. mieszkańców na mapie powiatów
-wypadki.powiaty %>% 
-  select(Rok, Kod, Wartosc) %>% 
-  filter(Rok==2015) %>% 
-  mutate(KodJoin = Kod / 1000) %>% 
-  left_join(powiaty, by=c("KodJoin"="kodJednostki")) %>% 
+wypadki.na.100tysp %>% 
+  select(Rok, nowyKod, Wartosc) %>% 
+  filter(Rok==2017) %>% 
+  left_join(powiaty, by=c("nowyKod"="kodJednostki")) %>% 
   ggplot(aes(geometry = geometry)) +
-  geom_sf(aes(fill=Wartosc))
+  geom_sf(aes(fill=Wartosc)) +
+  scale_fill_gradient(low="White", high = "Red") +
+  labs(title = "Liczba wypadków drogowych na 100 tys. mieszkańców",
+       subtitle = "Rok 2017",
+       fill = 'wypadki')
+
+#wykresy
+wypadki.na.100tysp %>% 
+  select(Rok, Nazwa, Wartosc) %>% 
+  filter(Rok==2017) %>% 
+  arrange(-Wartosc) %>% 
+  head(10) %>% 
+  ggplot(aes(x=reorder(Nazwa, Wartosc), y=Wartosc)) +
+  geom_bar(stat = "identity") +
+  theme(legend.position = "none", axis.title.y = element_blank()) +
+  labs(title = "10 powiatów z najwyższą liczbą wypadków na 100 tys. mieszkańców", 
+       subtitle = "Rok 2017",
+       y="Liczba wypadków na 100 tys. mieszkańców") +
+  coord_flip()
+
+
+wypadki.na.100tysp %>% 
+  select(Rok, Nazwa, Wartosc) %>% 
+  filter(Rok==2017) %>% 
+  arrange(-Wartosc) %>% 
+  tail(10) %>% 
+  ggplot(aes(x=reorder(Nazwa, -Wartosc), y=Wartosc)) +
+  geom_bar(stat = "identity") +
+  theme(legend.position = "none", axis.title.y = element_blank()) +
+  labs(title = "10 powiatów z najniższą liczbą wypadków na 100 tys. mieszkańców", 
+       subtitle = "Rok 2017",
+       y="Liczba wypadków na 100 tys. mieszkańców") +
+  coord_flip()
+
+#ofiary śmiertelne na 100 tys. pojazdów
+ofiary.na.100tysp %>% 
+  select(Rok, nowyKod, Wartosc) %>% 
+  filter(Rok==2017) %>% 
+  left_join(powiaty, by=c("nowyKod"="kodJednostki")) %>% 
+  ggplot(aes(geometry = geometry)) +
+  geom_sf(aes(fill=Wartosc)) +
+  scale_fill_gradient(low="White", high = "Red") +
+  labs(title = "Liczba ofiar śmiertelnych wypadków drogowych na 100 tys. pojazdów",
+       subtitle = "Rok 2017",
+       fill = 'zgony')
+
+#wykresy
+ofiary.na.100tysp %>% 
+  select(Rok, Nazwa, Wartosc) %>% 
+  filter(Rok==2017) %>% 
+  arrange(-Wartosc) %>% 
+  head(10) %>% 
+  ggplot(aes(x=reorder(Nazwa, Wartosc), y=Wartosc)) +
+  geom_bar(stat = "identity") +
+  theme(legend.position = "none", axis.title.y = element_blank()) +
+  labs(title = "10 powiatów z najwyższą liczbą ofiar śmiertelnych na 100 tys. pojazdów", 
+       subtitle = "Rok 2017",
+       y="Liczba ofiar śmiertelnych na 100 tys. pojadów") +
+  coord_flip()
+
+
+ofiary.na.100tysp %>% 
+  select(Rok, Nazwa, Wartosc) %>% 
+  filter(Rok==2017) %>% 
+  arrange(-Wartosc) %>% 
+  tail(10) %>% 
+  ggplot(aes(x=reorder(Nazwa, -Wartosc), y=Wartosc)) +
+  geom_bar(stat = "identity") +
+  theme(legend.position = "none", axis.title.y = element_blank()) +
+  labs(title = "10 powiatów z najniższą liczbą ofiar śmiertelnych na 100 tys. pojazdów", 
+       subtitle = "Rok 2017",
+       y="Liczba ofiar śmiertelnych na 100 tys. pojadów") +
+  coord_flip()
+
+#ofiary śmiertelne na 100 wypadków
+ofiary.na.100wyp %>% 
+  select(Rok, nowyKod, Wartosc) %>% 
+  filter(Rok==2017) %>% 
+  left_join(powiaty, by=c("nowyKod"="kodJednostki")) %>% 
+  ggplot(aes(geometry = geometry)) +
+  geom_sf(aes(fill=Wartosc)) +
+  scale_fill_gradient(low="White", high = "Red") +
+  labs(title = "Liczba ofiar śmiertelnych wypadków drogowych na 100 wypadków",
+       subtitle = "Rok 2017",
+       fill = 'zgony')
+
+#wykresy
+ofiary.na.100wyp %>% 
+  select(Rok, Nazwa, Wartosc) %>% 
+  filter(Rok==2017) %>% 
+  arrange(-Wartosc) %>% 
+  head(10) %>% 
+  ggplot(aes(x=reorder(Nazwa, Wartosc), y=Wartosc)) +
+  geom_bar(stat = "identity") +
+  theme(legend.position = "none", axis.title.y = element_blank()) +
+  labs(title = "10 powiatów z najwyższą liczbą ofiar śmiertelnych na 100 wypadków", 
+       subtitle = "Rok 2017",
+       y="Liczba ofiar śmiertelnych na 100 wypadków") +
+  coord_flip()
+
+
+ofiary.na.100wyp %>% 
+  select(Rok, Nazwa, Wartosc) %>% 
+  filter(Rok==2017) %>% 
+  arrange(-Wartosc) %>% 
+  tail(10) %>% 
+  ggplot(aes(x=reorder(Nazwa, -Wartosc), y=Wartosc)) +
+  geom_bar(stat = "identity") +
+  theme(legend.position = "none", axis.title.y = element_blank()) +
+  labs(title = "10 powiatów z najniższą liczbą ofiar śmiertelnych na 100 wypadków", 
+       subtitle = "Rok 2017",
+       y="Liczba ofiar śmiertelnych na 100 wypadków") +
+  coord_flip()
