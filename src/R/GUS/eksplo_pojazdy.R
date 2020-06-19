@@ -78,6 +78,8 @@ ludnosc.polska %>%
   filter(Wiek == 'ogółem', Płeć == 'ogółem', str_detect(Nazwa, "^Powiat")) %>% 
   drop_na() -> ludnosc.polska.ogolem.powiaty
 
+
+
 pojazdy.ogolem.powiaty %>% 
   select(Rok, Kod, suma) %>% 
   left_join(ludnosc.polska.ogolem.powiaty, by=c("Kod"="Kod", "Rok"="Rok")) %>% 
@@ -85,11 +87,23 @@ pojazdy.ogolem.powiaty %>%
   transmute(liczba.pojazdow=suma, liczba.ludnosci=Wartosc, pojazdy.na.100tysm=liczba.pojazdow/(liczba.ludnosci/100000)) %>% 
   distinct() -> pojazdy.ludnosc.powiaty
 
+quantiles <- summary(pojazdy.ludnosc.powiaty$pojazdy.na.100tysm)
+
+pojazdy.ludnosc.powiaty$klasy.pojazdy.na.100tys = case_when(
+  pojazdy.ludnosc.powiaty$pojazdy.na.100tysm < quantiles[[2]] ~ sprintf("0 ~< %.2f", quantiles[[2]]),
+  pojazdy.ludnosc.powiaty$pojazdy.na.100tysm >= quantiles[[2]] & pojazdy.ludnosc.powiaty$pojazdy.na.100tysm < quantiles[[4]] ~ sprintf("%.2f ~< %.2f", quantiles[[2]], quantiles[[4]]),
+  pojazdy.ludnosc.powiaty$pojazdy.na.100tysm >= quantiles[[4]] & pojazdy.ludnosc.powiaty$pojazdy.na.100tysm < quantiles[[5]] ~ sprintf("%.2f ~< %.2f", quantiles[[4]], quantiles[[5]]),
+  pojazdy.ludnosc.powiaty$pojazdy.na.100tysm >= quantiles[[5]] & pojazdy.ludnosc.powiaty$pojazdy.na.100tysm < quantiles[[6]] ~ sprintf("%.2f ~< %.2f", quantiles[[5]], quantiles[[6]]),
+)
+
+pojazdy.ludnosc.powiaty %>% 
+  head()
+
 #pojazdy na 100 tys. mieszkańców rok 2015 na mapie powiatów
 pojazdy.ludnosc.powiaty %>% 
-  select(Rok, Kod, pojazdy.na.100tysm) %>% 
+  select(Rok, Kod, klasy.pojazdy.na.100tys) %>% 
   filter(Rok==2015) %>% 
   mutate(KodJoin = Kod / 1000) %>% 
   left_join(powiaty, by=c("KodJoin"="kodJednostki")) %>% 
   ggplot(aes(geometry = geometry)) +
-  geom_sf(aes(fill=pojazdy.na.100tysm))
+  geom_sf(aes(fill=klasy.pojazdy.na.100tys)) 
