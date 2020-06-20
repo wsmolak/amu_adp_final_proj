@@ -94,6 +94,7 @@ pojazdy.ludnosc.powiaty$klasy.pojazdy.na.100tys = factor(pojazdy.ludnosc.powiaty
 Na poniższym wykresie porównano zachowanie trendu liczby wypadków drogowych ze wzrostem kilometrów autostrad w Polsce. Widać, że wraz ze wzrostem liczby kilometrów oddawanych do użytku autostrad malała liczba wypadków drogowych.
 
 ```{r pressure, echo=FALSE, warning=FALSE}
+options(Encoding="UTF-8")
 ylim.prim <- c(0, 2500)   # kilometry autostrad
 ylim.sec <- c(1000, 2500)    # liczba wypadków
 
@@ -114,6 +115,7 @@ ggplot() +
 ### Pojazdy ogółem
 
 ```{r pojazdy, echo=FALSE, warning=FALSE}
+options(Encoding="UTF-8")
 #pojazdy ogółem rok 2015 na mapie powiatów
 pojazdy.ogolem.powiaty %>% 
   select(Rok, Kod, suma) %>% 
@@ -148,6 +150,7 @@ pojazdy.ludnosc.powiaty %>%
 ### Pojazdy na 100 tys. mieszkańców na mapie - klasy
 
 Na powyższej mapie, liczba pojazdów w powiatach została zobrazowana za pomocą gradientu koloru. Ze względu na szeroki zakres wartości może być ciężko odróżnić wartości. Na kolejnej ilustracji wartości podzielono na zakresy i pokazano 4 klas, które powstały z przedziałów kwantylowych:
+
 * 0 - 25 %
 * 25 - 50 %
 * 50 - 75 %
@@ -203,4 +206,151 @@ pojazdy.ludnosc.powiaty %>%
   coord_flip()
 ```
 
+## Wypadki
+
+### Liczba wypadków na 100 tys. mieszkańców na mapie powiatów
+
+```{r warning=FALSE}
+#wypadki na 100 tys. mieszkańców na mapie powiatów
+wypadki.na.100tysp %>% 
+  select(Rok, nowyKod, Wartosc) %>% 
+  filter(Rok==2017) %>% 
+  left_join(powiaty, by=c("nowyKod"="kodJednostki")) %>% 
+  ggplot(aes(geometry = geometry)) +
+  geom_sf(aes(fill=Wartosc)) +
+  scale_fill_gradient(low="White", high = "Red") +
+  labs(title = "Liczba wypadków drogowych na 100 tys. mieszkańców",
+       subtitle = "Rok 2017",
+       fill = 'wypadki')
+```
+
+### Wykresy top/bottom
+```{r warning=FALSE}
+#wykresy
+wypadki.na.100tysp %>% 
+  select(Rok, Nazwa, Wartosc) %>% 
+  filter(Rok==2017) %>% 
+  arrange(-Wartosc) %>% 
+  head(10) %>% 
+  ggplot(aes(x=reorder(Nazwa, Wartosc), y=Wartosc)) +
+  geom_bar(stat = "identity") +
+  theme(legend.position = "none", axis.title.y = element_blank()) +
+  labs(title = "10 powiatów z najwyższą liczbą wypadków na 100 tys. mieszkańców", 
+       subtitle = "Rok 2017",
+       y="Liczba wypadków na 100 tys. mieszkańców") +
+  coord_flip()
+```
+
+```{r warning=FALSE}
+wypadki.na.100tysp %>% 
+  select(Rok, Nazwa, Wartosc) %>% 
+  filter(Rok==2017) %>% 
+  arrange(-Wartosc) %>% 
+  tail(10) %>% 
+  ggplot(aes(x=reorder(Nazwa, -Wartosc), y=Wartosc)) +
+  geom_bar(stat = "identity") +
+  theme(legend.position = "none", axis.title.y = element_blank()) +
+  labs(title = "10 powiatów z najniższą liczbą wypadków na 100 tys. mieszkańców", 
+       subtitle = "Rok 2017",
+       y="Liczba wypadków na 100 tys. mieszkańców") +
+  coord_flip()
+```
+
+### Liczba ofiar śmiertelnych w wypadkach na 100 tys. pojazdów
+
+```{r warning=FALSE}
+#ofiary śmiertelne na 100 tys. pojazdów
+ofiary.na.100tysp %>% 
+  select(Rok, nowyKod, Wartosc) %>% 
+  filter(Rok==2017) %>% 
+  left_join(powiaty, by=c("nowyKod"="kodJednostki")) %>% 
+  ggplot(aes(geometry = geometry)) +
+  geom_sf(aes(fill=Wartosc)) +
+  scale_fill_gradient(low="White", high = "Red") +
+  labs(title = "Liczba ofiar śmiertelnych wypadków drogowych na 100 tys. pojazdów",
+       subtitle = "Rok 2017",
+       fill = 'zgony')
+```
+
+### Wykresy top/bottom
+```{r warning=FALSE}
+ofiary.na.100tysp %>% 
+  select(Rok, Nazwa, Wartosc) %>% 
+  filter(Rok==2017) %>% 
+  arrange(-Wartosc) %>% 
+  head(10) %>% 
+  ggplot(aes(x=reorder(Nazwa, Wartosc), y=Wartosc)) +
+  geom_bar(stat = "identity") +
+  theme(legend.position = "none", axis.title.y = element_blank()) +
+  labs(title = "10 powiatów z najwyższą liczbą ofiar śmiertelnych na 100 tys. pojazdów", 
+       subtitle = "Rok 2017",
+       y="Liczba ofiar śmiertelnych na 100 tys. pojadów") +
+  coord_flip()
+```
+
+```{r warning=FALSE}
+
+ofiary.na.100tysp %>% 
+  select(Rok, Nazwa, Wartosc) %>% 
+  filter(Rok==2017) %>% 
+  arrange(-Wartosc) %>% 
+  tail(10) %>% 
+  ggplot(aes(x=reorder(Nazwa, -Wartosc), y=Wartosc)) +
+  geom_bar(stat = "identity") +
+  theme(legend.position = "none", axis.title.y = element_blank()) +
+  labs(title = "10 powiatów z najniższą liczbą ofiar śmiertelnych na 100 tys. pojazdów", 
+       subtitle = "Rok 2017",
+       y="Liczba ofiar śmiertelnych na 100 tys. pojadów") +
+  coord_flip()
+```
+
+### Liczba ofiar śmiertelnych na 100 wypadków
+
+```{r warning=FALSE}
+ofiary.na.100wyp %>% 
+  select(Rok, nowyKod, Wartosc) %>% 
+  filter(Rok==2017) %>% 
+  left_join(powiaty, by=c("nowyKod"="kodJednostki")) %>% 
+  ggplot(aes(geometry = geometry)) +
+  geom_sf(aes(fill=Wartosc)) +
+  scale_fill_gradient(low="White", high = "Red") +
+  labs(title = "Liczba ofiar śmiertelnych wypadków drogowych na 100 wypadków",
+       subtitle = "Rok 2017",
+       fill = 'zgony')
+```
+
+### WYkresy top/bottom
+
+```{r warning=FALSE}
+
+#wykresy
+ofiary.na.100wyp %>% 
+  select(Rok, Nazwa, Wartosc) %>% 
+  filter(Rok==2017) %>% 
+  arrange(-Wartosc) %>% 
+  head(10) %>% 
+  ggplot(aes(x=reorder(Nazwa, Wartosc), y=Wartosc)) +
+  geom_bar(stat = "identity") +
+  theme(legend.position = "none", axis.title.y = element_blank()) +
+  labs(title = "10 powiatów z najwyższą liczbą ofiar śmiertelnych na 100 wypadków", 
+       subtitle = "Rok 2017",
+       y="Liczba ofiar śmiertelnych na 100 wypadków") +
+  coord_flip()
+```
+
+```{r warning=FALSE}
+
+ofiary.na.100wyp %>% 
+  select(Rok, Nazwa, Wartosc) %>% 
+  filter(Rok==2017) %>% 
+  arrange(-Wartosc) %>% 
+  tail(10) %>% 
+  ggplot(aes(x=reorder(Nazwa, -Wartosc), y=Wartosc)) +
+  geom_bar(stat = "identity") +
+  theme(legend.position = "none", axis.title.y = element_blank()) +
+  labs(title = "10 powiatów z najniższą liczbą ofiar śmiertelnych na 100 wypadków", 
+       subtitle = "Rok 2017",
+       y="Liczba ofiar śmiertelnych na 100 wypadków") +
+  coord_flip()
+```
 
