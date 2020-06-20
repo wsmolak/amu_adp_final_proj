@@ -53,7 +53,7 @@ pojazdy.polska %>%
 #pojazdy ogółem rok 2015 na mapie powiatów
 pojazdy.ogolem.powiaty %>% 
   select(Rok, Kod, suma) %>% 
-  filter(Rok==2015) %>% 
+  filter(Rok==2017) %>% 
   mutate(KodJoin = Kod / 1000) %>% 
   left_join(powiaty, by=c("KodJoin"="kodJednostki")) %>% 
   ggplot(aes(geometry = geometry)) +
@@ -63,15 +63,10 @@ pojazdy.ogolem.powiaty %>%
 powiaty %>% 
   select(-waznyDo, -waznyOd, -gml_id, -lokalnyId, -przestrzenNazw, -rodzajJednostki, -nazwaJednostki, -organAdmPublicznej, -wersjaId, -poczatekWersjiObiektu) -> powiaty
 
-powiaty %>% 
-  head()
-
 ludnosc.polska %>% 
   select(Kod, Nazwa, Wiek, Płeć, Wartosc, Rok) %>% 
   filter(Wiek == 'ogółem', Płeć == 'ogółem', str_detect(Nazwa, "^Powiat")) %>% 
   drop_na() -> ludnosc.polska.ogolem.powiaty
-
-
 
 pojazdy.ogolem.powiaty %>% 
   select(Rok, Kod, Nazwa, suma) %>% 
@@ -136,7 +131,7 @@ pojazdy.ludnosc.powiaty %>%
        y="Liczba pojazdów na 100 tys. mieszkańców") +
   coord_flip()
 
-#pojazdy na 100 tys. mieszkańców rok 2015 na mapie powiatów - klasy
+#pojazdy na 100 tys. mieszkańców rok 2017 na mapie powiatów - klasy
 pojazdy.ludnosc.powiaty %>% 
   select(Rok, Kod, klasy.pojazdy.na.100tys) %>% 
   filter(Rok==2017) %>% 

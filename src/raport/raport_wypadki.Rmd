@@ -1,0 +1,731 @@
+---
+title: "Wypadki drogowe w Polsce na tle statystyk Unii Europejskiej"
+author: "Karol Jaroń, Maciej Karczewski, Wojciech Smolak"
+date: "18 06 2020"
+output:
+  word_document: default
+  pdf_document:
+    dev: png
+---
+
+```{r setup, include=TRUE, echo=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, include=TRUE)
+knitr::opts_chunk$set(dpi=300, fig.width=6, fig.height = 5, fig.align = 'left')
+knitr::opts_chunk$set(cache = TRUE)
+
+pdf.options(encoding = "CP1250")
+
+library(eurostat)
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+library(cshapes)
+library(sf)
+library(scales)
+
+drogi <- read.csv2('../../data/GUS/drogi-polska.csv', sep = ";", encoding = "UTF-8")
+wypadki <- read.csv2('../../data/GUS/wypadki-polska.csv', sep = ";", encoding = "UTF-8")
+pojazdy.polska <- read.csv('../../data/GUS/pojazdy-polska.csv', sep = ";", encoding = "UTF-8")
+ludnosc.polska <- read.csv('../../data/GUS/ludnosc-polska.csv', sep = ';', encoding = "UTF-8")
+powiaty <- st_read(dsn='../../data/GUS/powiaty.gml', quiet = TRUE)
+```
+
+# Wprowadzenie
+
+W raporcie zebrano oraz przedstawiono dane dotyczace śmiertelnych wypadków drogowych, z podziałem na państwa UE.
+Przedstawiono również statystykę na temat liczby pojazdów w krajach UE.
+Wyniki analizowane są po kątem tego, jak na tle reszty państw wspólnoty wypada Polska.
+Podstawowym źródłem danych jest agencja Eurostat.
+W drugiej części raportu przedstawiono szczegółowe dane dla Polski w rozbiciu na powiaty. Źródłem danych był Bank Danych Lokalnych GUS.
+
+# Dane Unia Europejska
+
+## Zabici ogółem w wypadkach drogowych w państwach UE (2018)
+
+Dane za rok 2018 (z wyłączeniem Turcji) obejmują łączną liczbę zabitych oraz wartość przeliczoną na 100 tys. mieszkańców.
+
+```{r include=FALSE}
+dat <- get_eurostat(id = 'sdg_11_40', time_format = 'num', filters = list(time = '2018')) %>%
+  mutate(country = label_eurostat(geo, dic = "geo", lang = 'en', custom_dic = c(DE = "Germany")))
+
+dat_2018_nr <- dat %>%
+  filter(unit == "NR" & !geo %in% c('EU28', 'EU27_2020', 'TR')) %>%
+  select(geo, country, values)
+
+dat_2018_rt <- dat %>%
+  filter(unit == "RT" & !geo %in% c('EU28', 'EU27_2020', 'TR')) %>%
+  select(geo, country, values)
+```
+
+Poniższe wykresy pokazują, że Polska przoduje w unijnych statystykach dot. ofiar śmiertlenych wypadków drogowych.
+Dotyczy to zarówno wartości bezwględnych, jak liczby wypadków na 100 tys. mieszkańców.
+
+
+```{r fig.cap = "Wykres 1.", echo = FALSE}
+ggplot(dat_2018_rt, 
+       aes(x = reorder(country, values), y = values, fill = ifelse(geo == "PL", "Highlighted", "Normal"))) +
+  geom_bar(stat = "identity") + 
+  theme(legend.position = "none", axis.title.y = element_blank()) +
+  labs(title = 'Liczba ofiar śmiertelnych wypadków drogowych, 2018', y = 'Ofiary (na 100 tys.)', x = NULL) +
+  coord_flip()
+```
+
+
+## Zabici w wypadkach drogowych w państwach UE w ujęciu geograficznym (2018)
+
+Dane dot. współczynnika śmiertelności w wypadkach drogowych (na 100 tys.) zostały podzielone na 4 przedziały i zestawione z informacją geograniczną Eurostat.
+
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+mapdata <- get_eurostat_geospatial(nuts_level = 0, resolution = 20, output_class = "sf") %>%
+  right_join(dat_2018_rt) %>%
+  mutate(cat = cut_to_classes(values, n = 4, decimals = 1))
+```
+
+Poniższa mapa pokazuje, że najgorsza sytuacja pod względem ofiar śmiertelnych wypadków drogowych panuje w państwa Europy Środkowo-Wschodniej oraz na Bałkanach.
+
+```{r fig.cap = "Mapa 1.", echo = FALSE}
+ggplot(mapdata, aes(fill = cat)) + 
+  scale_fill_brewer(palette = 'Reds') + 
+  geom_sf(color = alpha('black', 1/3), alpha = .6) + 
+  coord_sf(xlim = c(-20,44), ylim = c(30,70)) +
+  labs(title = 'Ofiary śmiertelne wypadków drogowych, 2018', 
+       subtitle = '(na 100 tys. mieszkańców)', 
+       fill = 'Ofiary')
+```
+
+
+Wniosek ten ptwierdza mapa, na którą naniesiono dane w skali dyskretnej.
+
+```{r fig.cap = "Mapa 2.", echo = FALSE}
+ggplot(mapdata, aes(fill = values)) +
+  geom_sf(color = alpha('black', 1/3), alpha = .6) + 
+  scale_fill_gradient(low="white", high="red") +
+  coord_sf(xlim = c(-20,44), ylim = c(30,70)) +
+  labs(title = 'Ofiary śmiertelne wypadków drogowych, 2018', 
+       subtitle = 'Średnia na 100 tys. mieszkańców', 
+       fill = 'Wynik')
+```
+
+
+## Zabici w wypadkach drogowych w państwach UE wg pojazdu (2017)
+
+Dane Eurostat wymagają przeliczenia w stosunku do rozmiaru populacji w celu uzyskania miarodajnego porównania sytuacji w poszczególnych państwach.
+
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+dat_population <- get_eurostat(id = 'tps00001', time_format = 'num', filters = list(time = '2017')) %>%
+  dplyr::rename(population = values)
+
+dat_vehicle <- get_eurostat(id = 'tran_sf_roadve', time_format = 'num', filters = list(time = '2017')) %>%
+  left_join(dat_population) %>%
+  mutate(rate = values / population * 100000) %>%
+  mutate(country = label_eurostat(geo, dic = "geo", lang = 'en', custom_dic = c(DE = "Germany"))) %>%
+  drop_na()
+```
+
+Poniższy wykres wskazuje, że Polska jest jednym liderów pod względem liczby ofiar śmiertelnych wypadków drogowych z udziałem samochodów osobowych.
+
+```{r fig.cap = "Wykres 3.", echo = FALSE}
+ggplot(filter(dat_vehicle, vehicle == 'CAR'), 
+       aes(x = reorder(country, rate), y = rate, fill = ifelse(geo == "PL", "Highlighted", "Normal"))) +
+  geom_bar(stat = "identity") + 
+  theme(legend.position = "none", axis.title.y = element_blank()) +
+  labs(title = 'Liczba ofiar smiertelnych wypadków z udziałem samochodów osobowych, 2017', y = 'Ofiary (na 100 tys.)', x = NULL) +
+  coord_flip()
+```
+
+
+Polska nieco lepiej wypadła pod względem, liczby ofiar śmiertlenych wypadków z udziałem rowerzystów. Polska ustępuje pod tym względem niektórym państwom Europy Zachodniej, w tym Holandii (państwo o najwyśzym odsetku rowerzystów w Europie).
+
+```{r fig.cap = "Wykres 4.", echo = FALSE}
+ggplot(filter(dat_vehicle, vehicle == 'BIKE'), 
+       aes(x = reorder(country, rate), y = rate, fill = ifelse(geo == "PL", "Highlighted", "Normal"))) +
+  geom_bar(stat = "identity") + 
+  theme(legend.position = "none", axis.title.y = element_blank()) +
+  labs(title = 'Liczba ofiar smiertelnych wypadków z udziałem rowerzystów, 2017', y = 'Ofiary (na 100 tys.)', x = NULL) +
+  coord_flip() 
+```
+
+
+Niestety w zasobach Eurostat brakuje danych dotyczących ofiar wypadków z udziałem innych typów pojazdów, w tym pojazdów transportowych lub motocykli.
+
+
+## Ofiary wypadków wg rodzaju infrastruktury drogowej
+
+Dane za rok 2017 zostały przeliczone w stosunku do rozmiaru populacji.
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+dat_road <- get_eurostat(id = 'tran_sf_roadro', time_format = 'num', filters = list(time = '2017')) %>%
+  left_join(dat_population) %>%
+  mutate(rate = values / population * 100000) %>%
+  mutate(country = label_eurostat(geo, dic = "geo", lang = 'en', custom_dic = c(DE = "Germany"))) %>%
+  drop_na()
+```
+
+Pod względem liczby ofiar śmiertelnych wypadków drogowych na autostradach (w przeliczeniu na 100 tys. mieszkańców), Polska plasuje dole rankingu państw UE (wykres 8). Może to jednak wynikać z faktu, iż długość sieci autostrad w Polsce pozostaje nadal relatywnie mała.  
+
+```{r fig.cap = "Wykres 8.", echo = FALSE}
+ggplot(filter(dat_road, tra_infr == 'MWAY'), 
+       aes(x = reorder(country, rate), y = rate, fill = ifelse(geo == "PL", "Highlighted", "Normal"))) +
+  geom_bar(stat = "identity") + 
+  theme(legend.position = "none", axis.title.y = element_blank()) +
+  labs(title = 'Liczba ofiar śmiertelnych wypadków na autorstradach, 2017', y = 'Ofiary (na 100 tys.)', x = NULL) +
+  coord_flip()
+```
+
+
+W celu weryfikacji tej hipotezy, należy przeliczyć średnią liczbę ofiar śmiertlenych wypadków drogowych na autostradach na tysiąc km dróg tego rodzaju.
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+dat_motorways <- get_eurostat(id = 'ttr00002', time_format = 'num', filters = list(time = '2017')) %>%
+  filter(tra_infr == 'MWAY') %>%
+  dplyr::rename(mlenght = values)
+
+dat_motorways_deaths <- dat_road %>%
+  filter(tra_infr == 'MWAY') %>%
+  select(geo, values, country) %>%
+  right_join(dat_motorways) %>%
+  mutate(mrate = values / mlenght * 1000) %>%
+  drop_na()
+```
+
+Choć dane Eurostatu nt. stanu infrastruktury drogowej za 2017 r. są niestety niepełne, to nadal obrazują różnicę między Polską a państwa Europy Zachodniej. Pod względem średniej liczby ofiar śmiertelnych wypadków drogowych na autostradach w przeliczenia na 1 tys. km tego rodzaju dróg, Polska plasuje się w na trzecim miejscu (za Bułgarią i Rumunią).
+
+```{r fig.cap = "Wykres 9.", echo = FALSE}
+ggplot(dat_motorways_deaths, 
+       aes(x = reorder(country, mrate), y = mrate, fill = ifelse(geo == "PL", "Highlighted", "Normal"))) +
+  geom_bar(stat = "identity") + 
+  theme(legend.position = "none", axis.title.y = element_blank()) +
+  labs(title = 'Liczba ofiar śmiertelnych wypadków na 1 tys. km autostrad, 2017', y = 'Ofiary', x = NULL) +
+  coord_flip()
+```
+
+
+## Ofiary śmiertelne wypadków drogowych w latach 2000-2018 w wybranych państwach UE - analiza trendu
+
+Dane za lata 2000-2018 obejmuję jedynie wybrane państwa UE: Polskę, Niemcy, Francję, Wielką Brytanię (stan na 2018 r.), Hiszpanię, Szwecję, Włochy, Austrię, Belgię i Portugalię. 
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+dat_series <-  get_eurostat(id = 'sdg_11_40', time_format = 'num') %>%
+  mutate(country = label_eurostat(geo, dic = "geo", lang = 'en', custom_dic = c(DE = "Germany"))) %>%
+  filter(geo %in% c('PL', 'DE', 'FR', 'UK', 'ES', 'SE', 'IT', 'AT', 'BE', 'PT')) 
+```
+
+Wykres 12 potwierdza trend spadkowy dla liczba ofiar wypadków rogowych (w przeliczeniu na 100 tys.) mieszkańców we wszystkich przytoczonych państwawch. Dotyczy to również Polski, która jedynie w latach 2000-2003 notowała mniej ofiar śmiertelnych niż Portugalia.
+
+```{r fig.cap = "Wykres 10.", echo = FALSE}
+dat_series_rt <- filter(dat_series, unit == "RT")
+ggplot(dat_series_rt, 
+       aes(x = time, y = values, color = geo, label = country)) +
+  geom_line(size = .9, alpha = .5) +
+  geom_text(data = dat_series_rt %>% group_by(geo) %>% filter(time == max(time)), size = 3) + 
+  theme(legend.position = 'none') +
+  labs(title = "Ofiary śmiertelne wypadków drogowych, 2000-2018 (na 100 tys.)", x = "Rok", y = "Liczba (na 100 tys.)")
+```
+
+
+## ofiary śmiertelne wypadków drogowych na poziomie jednostek NUTS-2 (2018 r.)
+
+Dane oraz informacje geoprzestrzenne pochodzą z zasobów agencji Eurostat. W analizie pominięto regiony ulokowane na obszarze Turcji.
+Wyniki podzielono w oparciu o pięć przedziałów.
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+dat_nuts <- get_eurostat(id = 'tran_r_acci', time_format = 'num')
+
+mapdata_nuts <- get_eurostat_geospatial(nuts_level = 2) %>%
+  left_join(dat_nuts) %>%
+  filter(time == '2018', victim == 'KIL', unit == 'P_MHAB', CNTR_CODE != 'TR') %>%
+  mutate(cat = cut_to_classes(values, n = 5, decimals = 1)) 
+```
+
+Dane dot. liczby ofiar śmiertelnych wypadków drogowych (w przeliczeniu na 1 mln mieszkańców) na poziomie regionów NUTS-2, wyraźnie wskazują, że obszary o najwyśzym współczynniku wypadkowości znajdują się na wschodnich rubieżach UE (mapa 3). 
+
+```{r fig.cap = "Mapa 3.", echo = FALSE}
+ggplot(mapdata_nuts, aes(fill = cat))+
+  scale_fill_brewer(palette = 'Reds') +
+  geom_sf(color = alpha('black', 1/3), alpha = .6) +
+  xlim(c(-12,44)) + ylim(c(35,70)) +
+  labs(title = 'Ofiary śmiertelne wypadków drogowych, 2018 (NUTS-2)', 
+       subtitle = 'Ofiary na 1 mln.', 
+       fill = 'Liczba',
+       caption = 'Mapa 3.')
+```
+
+
+Te same dane przestawione na mapie w skali ciągłej.
+
+```{r fig.cap = "Mapa 4.", echo = FALSE}
+ggplot(mapdata_nuts, aes(fill = values))+
+  geom_sf(color = alpha('black', 1/3), alpha = .6) +
+  scale_fill_gradient(low="white", high="red") +
+  xlim(c(-12,44)) + ylim(c(35,70)) +
+  labs(title = 'Ofiary śmiertelne wypadków drogowych, 2018 (NUTS-2)', 
+       subtitle = 'Ofiary na 1 mln.', 
+       fill = 'Liczba')
+```
+
+
+Warto w tym miejscu przeanalizować jaka sytuacja pod tym względem występuje w Niemczech - państwie, które część do 1990 r. znajdowała się w tzw. Bloku Wschodnim. W tym celu należy przefiltrować dane obejmujące regiony leżące w obrębie landów niemieckich.
+
+```{r, include=FALSE}
+mapdata_nuts_de <- mapdata_nuts %>%
+  filter(CNTR_CODE == 'DE') %>%
+  mutate(cat = cut_to_classes(values, n = 3, decimals = 1))
+```
+
+Uzyskane dane zostały przedstawione na mapie Niemiec.
+
+```{r fig.cap = "Mapa 5.", echo = FALSE}
+ggplot(mapdata_nuts_de, aes(fill = cat)) +
+  scale_fill_brewer(palette = 'Reds') +
+  geom_sf(color = alpha('black', 1/3), alpha = .6) +
+  xlim(c(5,15)) + ylim(c(47,55)) +
+  labs(title = 'Ofiary śmiertelne wypadków drogowych w Niemczech, 2018 (NUTS-2)', 
+       subtitle = 'Ofiary na 1 mln.', 
+       fill = 'Liczba')
+```
+
+
+Aby lepiej zobrazować w jakim stopniu dane dla obszaru dawnego NRD różnią się od reszty kraju, należy nałożyć na mapę hsitoryczne granice Niemiec Wschodnich. W tym celu warto sięgnąć po bibliotekę Cshapes. 
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+hist_geo <- cshapes::cshp(as.Date("1989-1-1"), useGW = TRUE)
+hist_geo@data$geo_code <- as.character(hist_geo@data$ISO1AL3)
+div_de <- hist_geo[hist_geo@data$geo_code %in% c('DDR'), ]
+```
+
+Na mapie 6 wyraźnie widać, że problem wysokiej liczby ofiar wypadków drogowych nie dotyczy wyłącznie obszaru dawnego NRD. Nie zmienia to jednak faktu, że na tle reszty kraju, niemal cały teb obszar charakteryzuje sięwysoką liczbą ofiar śmiertelnych będących skutkiem wypadków drogowych.
+
+```{r fig.cap = "Mapa 6.", message=FALSE, echo = FALSE}
+ggplot() +
+  geom_sf(data = mapdata_nuts_de, mapping = aes(fill = cat), color = alpha('white', 1/3)) +
+  scale_fill_brewer(palette = 'Oranges', direction = 1, guide = 'legend') +
+  geom_polygon(data = div_de, 
+               mapping = aes(long, lat, group = group, fill = '9 ~< 30', alpha = 1), 
+               color = 'black', 
+               show.legend = FALSE) +
+  labs(title = 'Ofiary śmiertelne wypadków drogowych w Niemczech, 2018 (NUTS-2)', 
+       subtitle = 'Naniesione granice dawnego NRD', 
+       fill = 'Liczba')
+```
+
+
+Potwierdza to mapa, na której dane przedstawione zostały w skali ciągłej.
+
+```{r fig.cap = "Mapa 7.", message=FALSE, echo = FALSE}
+ggplot() +
+  geom_sf(data = mapdata_nuts_de, mapping = aes(fill = values), color = alpha('white', 1/3)) +
+  scale_fill_gradient(low = 'white', high = 'red') +
+  geom_polygon(data = div_de, 
+               mapping = aes(long, lat, group = group, fill = 0, alpha = 1), 
+               color = 'black', 
+               show.legend = FALSE) +
+  labs(title = 'Ofiary śmiertelne wypadków drogowych w Niemczech, 2018 (NUTS-2)', 
+       subtitle = 'Naniesione granice dawnego NRD', 
+       fill = 'Liczba')
+```
+
+
+## liczba samochodów osobowych na 1000 mieszkancow
+
+Uzupełnieniem powyżej przedstawionych danych są statystyki dotyczące liczby aut zarejestrowanych w krajach UE. 
+
+```{r, include=FALSE}
+# liczba samochodów z podzialem na wiek - id: road_eqs_carage
+dat_pass_cars_tot <- get_eurostat(id = 'road_eqs_carage', time_format = 'num', filters = list(time = '2018')) %>%
+  mutate(country = label_eurostat(geo, dic = "geo", lang = 'en', custom_dic = c(DE = "Germany", XK = "Kosovo"))) %>%
+  filter(age == "TOTAL" & !geo %in% c('EU28', 'EU27_2020', 'TR')) %>%
+  dplyr::rename(cars_qty = values) %>%
+  select(geo, cars_qty, country) %>%
+  drop_na()
+
+
+# liczba samochodów osobowych na 1000 mieszkancow - id: road_eqs_carhab
+dat_pass_cars <- get_eurostat(id = 'road_eqs_carhab', time_format = 'num', filters = list(time = '2018')) %>%
+  mutate(country = label_eurostat(geo, dic = "geo", lang = 'en', custom_dic = c(DE = "Germany", XK = "Kosovo"))) %>%
+  filter(!geo %in% c('EU28', 'EU27_2020', 'TR')) %>%
+  select(geo, values, country) %>%
+  drop_na()
+
+mapdata_pass_cars <- get_eurostat_geospatial(nuts_level = 0, resolution = 20, output_class = "sf") %>%
+  right_join(dat_pass_cars) %>%
+  mutate(cat = cut_to_classes(values, n = 4, decimals = 1))
+```
+
+Poniżej przedstawiono liczbę aut na wykresie słupkowym oraz w ujęciu geograficzny.
+```{r, fig.cap = "Wykres 11.", echo=FALSE, echo = FALSE}
+ggplot(dat_pass_cars, aes(x = reorder(country, values), y = values, fill = ifelse(geo == "PL", "Highlighted", "Normal"))) +
+  geom_bar(stat = "identity") + 
+  theme(legend.position = "none", axis.title.y = element_blank()) +
+  labs(title = 'Liczba samochodow osobowych na 1000 mieszkancow, 2018', y = 'Samochody', x = NULL) +
+  coord_flip()
+```
+
+```{r, fig.cap = "Mapa 8.", echo=FALSE, echo = FALSE}
+ggplot(mapdata_pass_cars, aes(fill = cat)) + 
+  scale_fill_brewer(palette = 'Reds') + 
+  geom_sf(color = alpha('black', 1/3), alpha = .6) + 
+  coord_sf(xlim = c(-20,44), ylim = c(30,70)) +
+  labs(title = 'liczba samochodow osobowych, 2017', 
+       subtitle = '(na 1000 mieszkancow)', 
+       fill = 'samochody')
+```
+
+
+## Stosunek liczby zgonow w wypadkach drogowych do liczby samochodow
+
+```{r, include=FALSE}
+dat_deaths_pass_cars <- dat %>%
+  filter(unit == "NR" & !geo %in% c('EU28', 'EU27_2020', 'TR')) %>%
+  select(geo, country, values)  %>%
+  dplyr::rename(dat_values = values) %>%
+  left_join(dat_pass_cars_tot) %>%
+  mutate(rate = dat_values / cars_qty * 100000) %>%
+  drop_na()
+
+mapdata_deaths_pass_cars <- get_eurostat_geospatial(nuts_level = 0, resolution = 20, output_class = "sf") %>%
+  right_join(dat_deaths_pass_cars) %>%
+  mutate(cat = cut_to_classes(rate, n = 4, decimals = 1))
+```
+
+```{r, fig.cap = "Wykres 12.", echo=FALSE}
+ggplot(dat_deaths_pass_cars, aes(x = reorder(country, rate), y = rate, fill = ifelse(geo == "PL", "Highlighted", "Normal"))) +
+  geom_bar(stat = "identity") + 
+  theme(legend.position = "none", axis.title.y = element_blank()) +
+  labs(title = 'stosunek liczby zgonow w wypadkach drogowych do liczby samochodow, 2018', y = 'liczba zgonów na 100000 samochodow', x = NULL) +
+  coord_flip()
+```
+
+
+```{r, fig.cap = "Mapa 9.", echo=FALSE}
+ggplot(mapdata_deaths_pass_cars, aes(fill = cat)) + 
+  scale_fill_brewer(palette = 'Reds') + 
+  geom_sf(color = alpha('black', 1/3), alpha = .6) + 
+  coord_sf(xlim = c(-20,44), ylim = c(30,70)) +
+  labs(title = 'liczba zgonów, 2018', 
+       subtitle = '(na 100000 samochodow osobowych)', 
+       fill = 'zgony')
+```
+
+Na powyższych dwóch mapach można zauważyć ciekawą zależność w liczbie zarejestrowanych aut oraz w liczbie zgonów. Np. w Rumunii, Bułgarii czy na Węgrzech, gdzie jest najmniej zarejestrowanych aut na 1000 mieszkańców, kraje te przodują w statystyce liczby zgonów w wypadkach drogowych na 100000 samochodów osobowych. 
+
+# Dane Polska
+
+```{r data-setup, echo=FALSE}
+wypadki %>% 
+  mutate(nowyKod = Kod / 1000, rodzaj.jst = if_else(nowyKod %% 100 == 0, 'woj', 'pow')) %>%
+  filter(rodzaj.jst == 'woj', Wskaźniki == 'wypadki drogowe na 100 tys. ludności', Wartosc != '') %>% 
+  select(Wartosc, Rok) %>% 
+  group_by(Rok) %>% 
+  transmute(suma = sum(Wartosc)) %>% 
+  distinct() -> wypadki_trend
+
+wypadki %>% 
+  mutate(nowyKod = Kod / 1000, rodzaj.jst = if_else(nowyKod %% 100 == 0, 'woj', 'pow')) %>%
+  filter(rodzaj.jst == 'pow', Wskaźniki == 'ofiary śmiertelne na 100 tys. pojazdów', Wartosc != '') %>% 
+  select(-Wskaźniki, -Jednostka.miary, -Atrybut, -X, -rodzaj.jst) -> ofiary.na.100tysp
+
+wypadki %>% 
+  mutate(nowyKod = Kod / 1000, rodzaj.jst = if_else(nowyKod %% 100 == 0, 'woj', 'pow')) %>%
+  filter(rodzaj.jst == 'pow', Wskaźniki == 'ofiary śmiertelne na 100 wypadków', Wartosc != '') %>% 
+  select(-Wskaźniki, -Jednostka.miary, -Atrybut, -X,-rodzaj.jst) -> ofiary.na.100wyp
+  
+wypadki %>% 
+  mutate(nowyKod = Kod / 1000, rodzaj.jst = if_else(nowyKod %% 100 == 0, 'woj', 'pow')) %>%
+  filter(rodzaj.jst == 'pow', Wskaźniki == 'wypadki drogowe na 100 tys. ludności', Wartosc != '') %>% 
+  select(-Wskaźniki, -Jednostka.miary, -Atrybut, -X, -rodzaj.jst) -> wypadki.na.100tysp
+
+drogi %>% 
+  mutate(nowyKod = Kod / 1000) %>%
+  filter(Rodzaje.dróg == 'autostrady', Wartosc != '') %>% 
+  select(Wartosc, Rok) %>% 
+  group_by(Rok) %>% 
+  transmute(suma = sum(Wartosc)) %>% 
+  distinct() -> drogi_trend
+
+pojazdy.polska %>% 
+  select(Wartosc, Rok, Grupy.wieku, Kod, Nazwa) %>% 
+  filter(Grupy.wieku == 'ogółem', str_detect(Nazwa, "^Powiat")) %>% 
+  group_by(Rok, Kod, Nazwa) %>% 
+  transmute(suma = sum(Wartosc)) %>% 
+  drop_na() %>% 
+  distinct() -> pojazdy.ogolem.powiaty
+
+powiaty %>% 
+  select(-waznyDo, -waznyOd, -gml_id, -lokalnyId, -przestrzenNazw, -rodzajJednostki, -nazwaJednostki, -organAdmPublicznej, -wersjaId, -poczatekWersjiObiektu) -> powiaty
+
+ludnosc.polska %>% 
+  select(Kod, Nazwa, Wiek, Płeć, Wartosc, Rok) %>% 
+  filter(Wiek == 'ogółem', Płeć == 'ogółem', str_detect(Nazwa, "^Powiat")) %>% 
+  drop_na() -> ludnosc.polska.ogolem.powiaty
+
+pojazdy.ogolem.powiaty %>% 
+  select(Rok, Kod, Nazwa, suma) %>% 
+  left_join(ludnosc.polska.ogolem.powiaty, by=c("Kod"="Kod", "Rok"="Rok")) %>% 
+  drop_na() %>% 
+  transmute(Nazwa=Nazwa.x, liczba.pojazdow=suma, liczba.ludnosci=Wartosc, pojazdy.na.100tysm=liczba.pojazdow/(liczba.ludnosci/100000)) %>% 
+  distinct() -> pojazdy.ludnosc.powiaty
+
+quantiles <- summary(pojazdy.ludnosc.powiaty$pojazdy.na.100tysm)
+
+pojazdy.ludnosc.powiaty$klasy.pojazdy.na.100tys = case_when(
+  pojazdy.ludnosc.powiaty$pojazdy.na.100tysm < quantiles[[2]] ~ sprintf("0 ~< %.2f", quantiles[[2]]),
+  pojazdy.ludnosc.powiaty$pojazdy.na.100tysm >= quantiles[[2]] & pojazdy.ludnosc.powiaty$pojazdy.na.100tysm < quantiles[[4]] ~ sprintf("%.2f ~< %.2f", quantiles[[2]], quantiles[[4]]),
+  pojazdy.ludnosc.powiaty$pojazdy.na.100tysm >= quantiles[[4]] & pojazdy.ludnosc.powiaty$pojazdy.na.100tysm < quantiles[[5]] ~ sprintf("%.2f ~< %.2f", quantiles[[4]], quantiles[[5]]),
+  pojazdy.ludnosc.powiaty$pojazdy.na.100tysm >= quantiles[[5]] & pojazdy.ludnosc.powiaty$pojazdy.na.100tysm <= quantiles[[6]] ~ sprintf("%.2f ~< %.2f", quantiles[[5]], quantiles[[6]]),
+)
+
+pojazdy.ludnosc.powiaty$klasy.pojazdy.na.100tys = factor(pojazdy.ludnosc.powiaty$klasy.pojazdy.na.100tys)
+```
+
+## Analiza wypadków w Polsce
+
+Na poniższym wykresie porównano zachowanie trendu liczby wypadków drogowych ze wzrostem kilometrów autostrad w Polsce. Widać, że wraz ze wzrostem liczby kilometrów oddawanych do użytku autostrad malała liczba wypadków drogowych.
+
+```{r fig.cap = "Wykres 13.", echo=FALSE}
+options(Encoding="UTF-8")
+ylim.prim <- c(0, 2500)   # kilometry autostrad
+ylim.sec <- c(1000, 2500)    # liczba wypadków
+
+b <- diff(ylim.prim)/diff(ylim.sec)
+a <- b*(ylim.prim[1] - ylim.sec[1])
+
+
+ggplot() +
+  geom_col(data = drogi_trend, aes(x=Rok, y=suma)) +
+  geom_line(data = wypadki_trend, aes(x=Rok, y=suma), color = "red") +
+  scale_y_continuous("Długość autostrad [km]", sec.axis = sec_axis(~ (. - a)/b, name = "Liczba wypadków na 100 tys. mieszkańców")) +
+  theme(axis.line.y.right = element_line(color = "red"), 
+        axis.ticks.y.right = element_line(color = "red"),
+        axis.text.y.right = element_text(color = "red"), 
+        axis.title.y.right = element_text(color = "red")
+  ) 
+```
+
+
+### Pojazdy na 100 tys. mieszkańców na mapie - klasy
+
+
+```{r fig.cap = "Mapa 10.", echo = FALSE}
+#pojazdy na 100 tys. mieszkańców rok 2017 na mapie powiatów - klasy
+pojazdy.ludnosc.powiaty %>% 
+  select(Rok, Kod, klasy.pojazdy.na.100tys) %>% 
+  filter(Rok==2017) %>% 
+  mutate(KodJoin = Kod / 1000) %>% 
+  left_join(powiaty, by=c("KodJoin"="kodJednostki")) %>% 
+  ggplot(aes(geometry = geometry, fill=klasy.pojazdy.na.100tys)) +
+  scale_fill_brewer(palette = 'Reds') +
+  geom_sf(color = alpha('black', 1/3), alpha = .6) +
+  labs(title = "Liczba pojazdów na 100 tys. mieszkańców",
+       subtitle = "Rok 2017",
+       fill = 'pojazdy')
+```
+
+
+### Wykresy 10 powiatów z największą i najmniejszą liczbą zarejestrowanych aut osobowych
+
+Na poniższych ilustracjach obserwujemy, że powiatem o największej liczbie aut na mieszkańca jest powiat ziemski wałbrzyski, a o najmniejszej Powiat Miasto Wałbrzych.
+
+```{r fig.cap = "Wykres 14.", echo = FALSE}
+#Wykres top 10 pojazdów na 100 tys. mieszkańców
+pojazdy.ludnosc.powiaty %>%
+  filter(Rok==2017) %>% 
+  select(Nazwa, pojazdy.na.100tysm) %>% 
+  arrange(-pojazdy.na.100tysm) %>% 
+  head(10) %>% 
+  ggplot(aes(x = reorder(Nazwa, pojazdy.na.100tysm), y = pojazdy.na.100tysm)) + 
+  geom_bar(stat = "identity") +
+  theme(legend.position = "none", axis.title.y = element_blank()) +
+  labs(title = "10 powiatów z najwyższą liczbą pojazdów na 100 tys. mieszkańców", 
+       subtitle = "Rok 2017",
+       y="Liczba pojazdów na 100 tys. mieszkańców") +
+  coord_flip()
+```
+
+
+```{r fig.cap = "Wykres 15.", echo = FALSE}
+#Wykres bottom 10 pojazdów na 100 tys. mieszkańców
+pojazdy.ludnosc.powiaty %>%
+  filter(Rok==2017) %>% 
+  select(Nazwa, pojazdy.na.100tysm) %>% 
+  arrange(pojazdy.na.100tysm) %>% 
+  head(10) %>% 
+  ggplot(aes(x = reorder(Nazwa, -pojazdy.na.100tysm), y = pojazdy.na.100tysm)) + 
+  geom_bar(stat = "identity") +
+  theme(legend.position = "none", axis.title.y = element_blank()) +
+  labs(title = "10 powiatów z najniższą liczbą pojazdów na 100 tys. mieszkańców", 
+       subtitle = "Rok 2017",
+       y="Liczba pojazdów na 100 tys. mieszkańców") +
+  coord_flip()
+```
+
+
+## Wypadki
+
+### Liczba wypadków na 100 tys. mieszkańców na mapie powiatów
+
+Na poniższej mapie widać skupiska powiatów o najwyższej liczbie wypadków. Są to: 
+
+* powiaty w ciągu drogi Warszawa - Górny Śląsl, DK1 - tzw. "Gierkówka";
+* powiaty w ciągu drogi Kraków - Zakopane, DK 7, DK 47 - tzw. "Zakopianka";
+* powiaty sąsiadujące z Trójmiastem na zachodzie;
+
+Wyżej wymienione powiaty leżą na popularnych szlakach podróży wakacyjnych.
+
+```{r fig.cap = "Mapa 11.", echo = FALSE}
+#wypadki na 100 tys. mieszkańców na mapie powiatów
+wypadki.na.100tysp %>% 
+  select(Rok, nowyKod, Wartosc) %>% 
+  filter(Rok==2017) %>% 
+  left_join(powiaty, by=c("nowyKod"="kodJednostki")) %>% 
+  ggplot(aes(geometry = geometry)) +
+  geom_sf(aes(fill=Wartosc)) +
+  scale_fill_gradient(low="White", high = "Red") +
+  labs(title = "Liczba wypadków drogowych na 100 tys. mieszkańców",
+       subtitle = "Rok 2017",
+       fill = 'wypadki')
+```
+
+
+### Wykresy 10 powiatów z największą i najmniejszą liczbą wypadków drogowych na 100 tys. mieszkańców
+```{r fig.cap = "Wykres 16.", echo = FALSE}
+#wykresy
+wypadki.na.100tysp %>% 
+  select(Rok, Nazwa, Wartosc) %>% 
+  filter(Rok==2017) %>% 
+  arrange(-Wartosc) %>% 
+  head(10) %>% 
+  ggplot(aes(x=reorder(Nazwa, Wartosc), y=Wartosc)) +
+  geom_bar(stat = "identity") +
+  theme(legend.position = "none", axis.title.y = element_blank()) +
+  labs(title = "10 powiatów z najwyższą liczbą wypadków na 100 tys. mieszkańców", 
+       subtitle = "Rok 2017",
+       y="Liczba wypadków na 100 tys. mieszkańców") +
+  coord_flip()
+```
+
+
+```{r fig.cap = "Wykres 17.", echo = FALSE}
+wypadki.na.100tysp %>% 
+  select(Rok, Nazwa, Wartosc) %>% 
+  filter(Rok==2017) %>% 
+  arrange(-Wartosc) %>% 
+  tail(10) %>% 
+  ggplot(aes(x=reorder(Nazwa, -Wartosc), y=Wartosc)) +
+  geom_bar(stat = "identity") +
+  theme(legend.position = "none", axis.title.y = element_blank()) +
+  labs(title = "10 powiatów z najniższą liczbą wypadków na 100 tys. mieszkańców", 
+       subtitle = "Rok 2017",
+       y="Liczba wypadków na 100 tys. mieszkańców") +
+  coord_flip()
+```
+
+
+### Ilustracje uzupełniające
+
+### Liczba ofiar śmiertelnych w wypadkach na 100 tys. pojazdów
+
+```{r fig.cap = "Mapa 12.", echo = FALSE}
+#ofiary śmiertelne na 100 tys. pojazdów
+ofiary.na.100tysp %>% 
+  select(Rok, nowyKod, Wartosc) %>% 
+  filter(Rok==2017) %>% 
+  left_join(powiaty, by=c("nowyKod"="kodJednostki")) %>% 
+  ggplot(aes(geometry = geometry)) +
+  geom_sf(aes(fill=Wartosc)) +
+  scale_fill_gradient(low="White", high = "Red") +
+  labs(title = "Liczba ofiar śmiertelnych wypadków drogowych na 100 tys. pojazdów",
+       subtitle = "Rok 2017",
+       fill = 'zgony')
+```
+
+
+#### Wykresy 10 powiatów z największą i najmniejszą liczbą ofiar śmiertelnych na 100 tys. pojazdów
+
+```{r fig.cap = "Wykres 18.", echo = FALSE}
+ofiary.na.100tysp %>% 
+  select(Rok, Nazwa, Wartosc) %>% 
+  filter(Rok==2017) %>% 
+  arrange(-Wartosc) %>% 
+  head(10) %>% 
+  ggplot(aes(x=reorder(Nazwa, Wartosc), y=Wartosc)) +
+  geom_bar(stat = "identity") +
+  theme(legend.position = "none", axis.title.y = element_blank()) +
+  labs(title = "10 powiatów z najwyższą liczbą ofiar śmiertelnych na 100 tys. pojazdów", 
+       subtitle = "Rok 2017",
+       y="Liczba ofiar śmiertelnych na 100 tys. pojadów") +
+  coord_flip()
+```
+
+
+```{r fig.cap = "Wykres 19.", echo = FALSE}
+
+ofiary.na.100tysp %>% 
+  select(Rok, Nazwa, Wartosc) %>% 
+  filter(Rok==2017) %>% 
+  arrange(-Wartosc) %>% 
+  tail(10) %>% 
+  ggplot(aes(x=reorder(Nazwa, -Wartosc), y=Wartosc)) +
+  geom_bar(stat = "identity") +
+  theme(legend.position = "none", axis.title.y = element_blank()) +
+  labs(title = "10 powiatów z najniższą liczbą ofiar śmiertelnych na 100 tys. pojazdów", 
+       subtitle = "Rok 2017",
+       y="Liczba ofiar śmiertelnych na 100 tys. pojadów") +
+  coord_flip()
+```
+
+
+### Liczba ofiar śmiertelnych na 100 wypadków
+
+```{r fig.cap = "Mapa 13.", echo = FALSE}
+ofiary.na.100wyp %>% 
+  select(Rok, nowyKod, Wartosc) %>% 
+  filter(Rok==2017) %>% 
+  left_join(powiaty, by=c("nowyKod"="kodJednostki")) %>% 
+  ggplot(aes(geometry = geometry)) +
+  geom_sf(aes(fill=Wartosc)) +
+  scale_fill_gradient(low="White", high = "Red") +
+  labs(title = "Liczba ofiar śmiertelnych wypadków drogowych na 100 wypadków",
+       subtitle = "Rok 2017",
+       fill = 'zgony')
+```
+
+
+### Wykresy 10 powiatów z największą i najmniejszą liczbą ofiar śmiertelnych na 100 wypadków
+
+```{r fig.cap = "Wykres 20.", echo = FALSE}
+
+#wykresy
+ofiary.na.100wyp %>% 
+  select(Rok, Nazwa, Wartosc) %>% 
+  filter(Rok==2017) %>% 
+  arrange(-Wartosc) %>% 
+  head(10) %>% 
+  ggplot(aes(x=reorder(Nazwa, Wartosc), y=Wartosc)) +
+  geom_bar(stat = "identity") +
+  theme(legend.position = "none", axis.title.y = element_blank()) +
+  labs(title = "10 powiatów z najwyższą liczbą ofiar śmiertelnych na 100 wypadków", 
+       subtitle = "Rok 2017",
+       y="Liczba ofiar śmiertelnych na 100 wypadków") +
+  coord_flip()
+```
+
+
+```{r fig.cap = "Wykres 21.", echo = FALSE}
+
+ofiary.na.100wyp %>% 
+  select(Rok, Nazwa, Wartosc) %>% 
+  filter(Rok==2017) %>% 
+  arrange(-Wartosc) %>% 
+  tail(10) %>% 
+  ggplot(aes(x=reorder(Nazwa, -Wartosc), y=Wartosc)) +
+  geom_bar(stat = "identity") +
+  theme(legend.position = "none", axis.title.y = element_blank()) +
+  labs(title = "10 powiatów z najniższą liczbą ofiar śmiertelnych na 100 wypadków", 
+       subtitle = "Rok 2017",
+       y="Liczba ofiar śmiertelnych na 100 wypadków") +
+  coord_flip()
+```
+
+
