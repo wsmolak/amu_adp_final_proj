@@ -2,14 +2,17 @@
 title: "Wypadki i pojazdy w Polsce"
 author: "Wojciech Smolak"
 date: "6/19/2020"
-output: pdf_document
+output:
+  pdf_document: default
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE)
+knitr::opts_chunk$set(dpi=300, fig.width=8, fig.height = 7, fig.align = 'left')
+pdf.options(encoding = "CP1250")
 library(tidyverse)
-library(data.table)
 library(sf)
+library(scales)
 
 drogi <- read.csv2('../../data/GUS/drogi-polska.csv', sep = ";", encoding = "UTF-8")
 wypadki <- read.csv2('../../data/GUS/wypadki-polska.csv', sep = ";", encoding = "UTF-8")
@@ -22,7 +25,7 @@ powiaty <- st_read(dsn='../../data/GUS/powiaty.gml', quiet = TRUE)
 
 No jakiś tam raport. Dopisać tu do wstępu
 
-```{r data-setup, echo=FALSE}
+```{r data-setup, echo=FALSE, warning=FALSE}
 wypadki %>% 
   mutate(nowyKod = Kod / 1000, rodzaj.jst = if_else(nowyKod %% 100 == 0, 'woj', 'pow')) %>%
   filter(rodzaj.jst == 'woj', Wskaźniki == 'wypadki drogowe na 100 tys. ludności', Wartosc != '') %>% 
@@ -124,7 +127,7 @@ pojazdy.ogolem.powiaty %>%
   left_join(powiaty, by=c("KodJoin"="kodJednostki")) %>% 
   ggplot(aes(geometry = geometry)) +
   geom_sf(aes(fill=suma)) +
-  scale_fill_gradient(low="White", high="Red") +
+  scale_fill_gradient(low="White", high="Red", labels = comma) +
   labs(title = "Liczba pojazdów osobowych ogółem",
        subtitle = "Rok 2017",
        fill = 'pojazdy')
@@ -141,7 +144,7 @@ pojazdy.ludnosc.powiaty %>%
   left_join(powiaty, by=c("KodJoin"="kodJednostki")) %>% 
   ggplot(aes(geometry = geometry)) +
   geom_sf(aes(fill=pojazdy.na.100tysm)) +
-  scale_fill_gradient(low="White", high = "Red") +
+  scale_fill_gradient(low="White", high = "Red", labels = comma) +
   labs(title = "Liczba pojazdów na 100 tys. mieszkańców",
        subtitle = "Rok 2017",
        fill = 'pojazdy')
