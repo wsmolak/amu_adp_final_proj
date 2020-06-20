@@ -297,6 +297,7 @@ ggplot() +
 
 ####################################### liczba samochodów osobowych ############################################
 
+
 # liczba samochodów z podzialem na wiek - id: road_eqs_carage
 dat_pass_cars_tot <- get_eurostat(id = 'road_eqs_carage', time_format = 'num', filters = list(time = '2018')) %>%
   mutate(country = label_eurostat(geo, dic = "geo", lang = 'en', custom_dic = c(DE = "Germany", XK = "Kosovo"))) %>%
@@ -344,7 +345,6 @@ ggplot(mapdata_deaths_pass_cars, aes(fill = cat)) +
        subtitle = '(na 100000 samochodow osobowych)', 
        fill = 'zgony',
        caption = 'Mapa 8.')
-
 
 # Cytowanie (wymagane przez autora biblioteki):
 # Weidmann, Nils B., Doreen Kuse, and Kristian Skrede Gleditsch. 2010. The Geography of the International System: The CShapes Dataset. International Interactions 36 (1).
